@@ -54,7 +54,8 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
     - 自动安装
         ```CMD
         # 需要指定项目根目录的 requirements.txt
-        pip install -e <path_for_requirements.txt>
+        # 最好先手动安装 PyTorch
+        pip install -r <path_for_requirements.txt>
         ```
     - 手动安装
         ```CMD
