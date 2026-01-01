@@ -5,7 +5,7 @@ from collections import deque
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
 
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
 from transformers import pipeline
 from silero_vad import load_silero_vad
 from langchain.chat_models import init_chat_model
@@ -41,6 +41,9 @@ Task_ASR.clear()
 
 # 翻译相关 - 这里必须使用引用变量(非 int/str/None), 否则其它模块导入时只是 "静态快照", 不是 "动态引用"
 Task_LLM = {"TGT_LANG": None, "SYS_Prompt": None}
+
+# ASR Tokenizer
+ASR_Tokenizer = AutoTokenizer.from_pretrained(cfg.get("ASR", "ASR_Model"))
  
 # ASR Pipeline
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
