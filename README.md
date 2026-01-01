@@ -36,9 +36,22 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
         - 如果使用 OpenAI API, 并在本地运行, 请参考 [LM Studio 官网](https://lmstudio.ai/)
 
 - 采集系统音频
-    - 如果想采集系统内部声音, 需要寻找 "**立体声混音**"
+    - 如果想采集系统内部声音, 需要寻找 "**立体声混音 / Stereo Mix**"
     - Windows 上默认不开启该设备, 需要到系统里去开启, Win11 上的开启方法为:
       - 系统 -> 声音设置 -> 高级 -> 所有声音设备 -> 立体声混音 -> 允许
+    - 如果存在外部麦克风/耳机, 可能会导致 "**立体声混音 / Stereo Mix**" 失效, 如果外部麦克风/耳机必须要使用, 则可以尝试 [Voicemeeter](https://voicemeeter.com/) 进行音频路由
+      - 详细介绍请参考 [VOICEMEETER Virtual Inputs/Outputs (VAIO)](https://voicemeeter.com/quick-tips-voicemeeter-virtual-inputs-and-outputs-windows-10-and-up/)
+      - 如果只想采集电脑音频的话, Standard 版本就足够了
+      - 安装完成后, 在 Windows 系统中将 "声音输出" 设置为 `Voicemeeter Input (VB-Audio Voicemeeter VAIO)`
+      - 设置完成后启动 Voicemeeter, 将最右边的 A1 设置为目前正在发声的设备 (最右侧的 Hardware Out 部分)
+      - 此时在软件界面里, B(Virtual Out) 就会出现声音, 使用软件采集 B1 设备即可采集电脑音频
+        - A 系列设备是物理设备 (输出设备), Standard 版本可以同时选择2个, 这里只用 A1 即可
+        - B 系列设备是虚拟设备 (输入设备), Standard 版本只有 B1
+      - Voicemeeter Standard 版本只启用了2个A设备和1个B设备, 如果只打算采集电脑音频, 那么可以只启用这两个设备, 其余都可以禁用
+        - 输出设备
+          - `Voicemeeter Input (VB-Audio Voicemeeter VAIO)`
+        - 输入设备
+          - `Voicemeeter Out B1 (VB-Audio Voicemeeter VAIO)`
 
 
 # Installation
