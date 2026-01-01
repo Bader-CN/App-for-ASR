@@ -8,6 +8,7 @@ import numpy as np
 
 from datetime import datetime
 from collections import deque
+from threading import Lock
 from opencc import OpenCC
 from langchain.messages import HumanMessage, SystemMessage
 
@@ -23,6 +24,9 @@ from utils.vars import ASR_Result_Queue, ASR_Audio_Buffer, Audio_Queue
 from utils.vars import Task_ASR, Generate_Kwargs
 from utils.vars import Task_LLM
 from utils.vars import Task_VAD
+
+# 定义一个全局锁
+ASR_Audio_Buffer_Lock = Lock()
 
 def pyaudio_callback(in_data, frame_count, time_info, status):
     """
@@ -46,10 +50,11 @@ def pyaudio_callback(in_data, frame_count, time_info, status):
             # 如果没有人声
             if max_vad_threshold < Task_VAD.get("VAD_Threshold"):
                 logger.trace(f"No voice detected, current value: {max_vad_threshold:.4f}")
-                # 没人声时清除音频缓存队列
-                if len(ASR_Audio_Buffer) > 0:
-                    ASR_Audio_Buffer.clear()
-                return (None, pyaudio.paContinue)
+                with ASR_Audio_Buffer_Lock:   # 线程加锁
+                    # 没人声时清除音频缓存队列
+                    if len(ASR_Audio_Buffer) > 0:
+                        ASR_Audio_Buffer.clear()
+                    return (None, pyaudio.paContinue)
 
         # step3 - 如果有人声, 则将数据放入队列中
         logger.trace(f"Found voice detected, current value: {max_vad_threshold:.4f}")
@@ -84,30 +89,31 @@ def process_asr():
                 input_data = audio_data["input_data"]
                 time_info = audio_data["time_info"]
 
+                with ASR_Audio_Buffer_Lock: # 线程加锁
                 # 将音频数据放入缓存队列中
-                ASR_Audio_Buffer.append(input_data)
-                logger.debug(f"Currently ASR_Audio_Buffer Size: {len(ASR_Audio_Buffer)}")
+                    ASR_Audio_Buffer.append(input_data)
+                    logger.debug(f"Currently ASR_Audio_Buffer Size: {len(ASR_Audio_Buffer)}")
 
-                # 延迟判断 & 语音识别
-                ASR_Audio_Buffer_Size = len(ASR_Audio_Buffer)
-                if ASR_Audio_Buffer_Size >= delay_buffer:
-                    # 出现延迟
-                    if Audio_Queue.qsize() > 1:
-                        logger.debug("Found Delay in Audio Buffer Queue, will quickly update...")
-                        for i in range(Audio_Queue.qsize()):
-                            audio_data = Audio_Queue.get()
-                            time_info = audio_data["time_info"] # 需要修正时间
-                            ASR_Audio_Buffer.append(audio_data["input_data"])
-                
-                    # 语音识别
-                    audio_slice = np.concatenate(copy.deepcopy(ASR_Audio_Buffer), axis=0)
-                    asr_src_result = ASR_Pipeline(inputs=audio_slice, generate_kwargs=Generate_Kwargs)
-                    # 繁简转换, 解决异常中文问题
-                    asr_src_result["text"] = cc.convert(asr_src_result.get("text"))
-                    # 数据 & 时间 & 语音块长度
-                    asr_src_result["time"] = time_info
-                    asr_src_result["size"] = ASR_Audio_Buffer_Size
-                    ASR_Result_Queue.put(asr_src_result)
+                    # 延迟判断 & 语音识别
+                    ASR_Audio_Buffer_Size = len(ASR_Audio_Buffer)
+                    if ASR_Audio_Buffer_Size >= delay_buffer:
+                        # 出现延迟
+                        if Audio_Queue.qsize() > 1:
+                            logger.debug("Found Delay in Audio Buffer Queue, will quickly update...")
+                            for i in range(Audio_Queue.qsize()):
+                                audio_data = Audio_Queue.get()
+                                time_info = audio_data["time_info"] # 需要修正时间
+                                ASR_Audio_Buffer.append(audio_data["input_data"])
+                    
+                        # 语音识别
+                        audio_slice = np.concatenate(copy.deepcopy(ASR_Audio_Buffer), axis=0)
+                        asr_src_result = ASR_Pipeline(inputs=audio_slice, generate_kwargs=Generate_Kwargs)
+                        # 繁简转换, 解决异常中文问题
+                        asr_src_result["text"] = cc.convert(asr_src_result.get("text"))
+                        # 数据 & 时间 & 语音块长度
+                        asr_src_result["time"] = time_info
+                        asr_src_result["size"] = ASR_Audio_Buffer_Size
+                        ASR_Result_Queue.put(asr_src_result)
 
     except Exception as e:
         logger.error(e)
