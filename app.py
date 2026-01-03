@@ -52,7 +52,7 @@ with gr.Blocks(title="Real-time ASR", fill_width=True) as demo:
 if __name__ == "__main__":
     try:
         demo.launch(
-            # server_port=cfg.getint("General", "Server_Port"),
+            server_port=cfg.getint("General", "Server_Port"),
             # inbrowser=True,
         )
     except Exception as e:
