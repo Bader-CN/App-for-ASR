@@ -1,21 +1,23 @@
 import os
 import gradio as gr
 
-from utils.gui import get_audio_devices, set_audio_dev_idx
-from utils.gui import set_source_language, set_target_language
-from utils.gui import set_vad_threshold, set_btn_label
 from utils.cfg import cfg
 from utils.log import logger
-from utils.core import audio_text_update
-from utils.vars import Task_VAD
 
 # 设置环境变量, 用来将 FFmpeg 添加进入系统环境变量中
 try:
     # os.pathsep 是平台相关的路径分隔符
-    os.environ["Path"] = os.path.abspath(cfg.get("General", "FFmpeg_Path")) + os.pathsep + os.environ['PATH'] + os.environ["Path"]
+    os.environ["Path"] = os.path.abspath(cfg.get("General", "FFmpeg_Path")) + os.pathsep + os.environ["Path"]
     logger.info(f"Temporarily add Path environment variables: {os.path.abspath(cfg.get("General", "FFmpeg_Path"))}")
+    logger.info(f"Currently Path environment variables: {os.environ["Path"]}")
 except Exception as e:
     logger.error(e)
+
+from utils.gui import get_audio_devices, set_audio_dev_idx
+from utils.gui import set_source_language, set_target_language
+from utils.gui import set_vad_threshold, set_btn_label
+from utils.core import audio_text_update
+from utils.vars import Task_VAD
 
 # 可录音的设备列表
 audio_devices = get_audio_devices()
@@ -48,7 +50,10 @@ with gr.Blocks(title="Real-time ASR", fill_width=True) as demo:
         ui_audio_content = gr.TextArea(label="识别内容", value=audio_text_update, every=cfg.getfloat("General", "ASR_Update_Freq"))
 
 if __name__ == "__main__":
-    demo.launch(
-        server_port=cfg.getint("General", "Server_Port"),
-        inbrowser=True,
-    )
+    try:
+        demo.launch(
+            # server_port=cfg.getint("General", "Server_Port"),
+            # inbrowser=True,
+        )
+    except Exception as e:
+        logger.error(e)

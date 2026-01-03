@@ -3,11 +3,14 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
 
 
 # Quickstart
-- 打开方式
-    - Windows 系统上双击执行 `strart_srv.bat` 即可 (需要有 `.venv` 虚拟环境)
-    - 使用命令 `python app.py` 来启动服务
-- 浏览器会自动打开, 如果没有请在浏览器里输入 `http://127.0.0.1:7860/` 即可
-
+- 前置准备
+  - 编辑配置文件 `config.cfg`, 需要指定 `FFmpeg_Path` 对应的路径 (需要 Full-Shared 版本)
+  - 编辑配置文件 `config.cfg`, 需要指定 `ASR_Model` 模型对应的路径
+  - 编辑配置文件 `config.cfg`, 需要指定 `LLM` 部分对应的参数
+- 打开方法
+  - 执行 `Real-time ASR.bat`        (请参考 Installation 来配置环境)
+  - 执行 `python Real-time ASR.py`  (请参考 Installation 来配置环境)
+  - 执行编译后的 `Real-time ASR.exe` (请参考 How to Build 部分)
 
 # Running effect
 ![ASR & Translation Running effect](./example/ASR%20and%20Translation%20effect.png)
@@ -87,4 +90,21 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
         pip install -U langchain
         pip install -U langchain-ollama
         pip install -U langchain-openai
+        pip install -U pywebview
+        pip install -U pyinstaller
         ```
+
+
+# How to Build
+> 请确保已经安装好了环境依赖部分
+1. 激活虚拟环境
+  ```CMD
+  cd .\.venv\Scripts && activate.bat
+  ```
+2. 编辑 `Real-time ASR.spec` 文件中的第7行 `ffmpeg_path`，修改为你的 FFmpeg Full-Shared 路径
+3. 启动构建命令, 完成后会在 `dist` 目录下生成可执行文件
+  ```
+  pyinstaller ".\Real-Time ASR.spec"
+  ```
+4. 将文件 `config.json` 和目录 `model` / `FFmpeg` 复制到 `dist\Real-time ASR` 目录下
+5. 调整  `config.json` 相关项, 确保能够找到 `模型目录 model`, `FFmpeg` 的路径, 以及 `LLM` 部分参数正确
