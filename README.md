@@ -81,6 +81,7 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
         pip3 install torch torchvision
 
         # 其余依赖库
+        # 如果安装缓慢, 可以指定镜像站: -i https://pypi.tuna.tsinghua.edu.cn/simple
         pip install -U gradio
         pip install -U pyaudio
         pip install -U loguru

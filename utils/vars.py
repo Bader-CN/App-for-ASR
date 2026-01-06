@@ -6,13 +6,15 @@ from collections import deque
 from threading import Event
 from concurrent.futures import ThreadPoolExecutor
 
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
-from transformers import pipeline
 from silero_vad import load_silero_vad
-from langchain.chat_models import init_chat_model
 
 from utils.log import logger
 from utils.cfg import cfg
+
+# 线程池里导包, 这里仅做记录
+# from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
+# from transformers import pipeline
+# from langchain.chat_models import init_chat_model
 
 logger.info("Initialize other parameters...")
 #############################################
@@ -50,6 +52,9 @@ def init_ASR():
     初始化 ASR 的 tokenizer, model, pipeline
     """
     logger.info("Initializing ASR tokenizer, model and pipeline...")
+    # 导包也放进线程池里
+    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
+    from transformers import pipeline
     # ASR Tokenizer
     ASR_Tokenizer = AutoTokenizer.from_pretrained(cfg.get("ASR", "ASR_Model"))
  
@@ -87,6 +92,8 @@ def init_LLM():
     初始化 LLM
     """
     logger.info("Initializing LLM...")
+    # 导包也放进线程池里
+    from langchain.chat_models import init_chat_model
     LLM_Model = init_chat_model(
         model_provider=cfg.get("LLM", "Provider"),
         model = cfg.get("LLM", "Model_Name"),
