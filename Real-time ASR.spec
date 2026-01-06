@@ -22,12 +22,6 @@ datas.extend(torch_datas)
 binaries.extend(torch_binaries)
 hiddenimports.extend(torch_hiddenimports)
 
-# 收集 Whisper 模型相关内容
-whisper_datas, whisper_binaries, whisper_hiddenimports = collect_all('transformers.models.whisper')
-datas.extend(whisper_datas)
-binaries.extend(whisper_binaries)
-hiddenimports.extend(whisper_hiddenimports)
-
 # 修复 silero_vad 依赖问题
 silero_datas, silero_binaries, silero_hiddenimports = collect_all('silero_vad')
 datas.extend(silero_datas)
