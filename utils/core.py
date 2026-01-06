@@ -50,7 +50,7 @@ def pyaudio_callback(in_data, frame_count, time_info, status):
                     max_vad_threshold = speech_prob
             # 如果没有人声
             if max_vad_threshold < Task_VAD.get("VAD_Threshold"):
-                logger.trace(f"No voice detected, current value: {max_vad_threshold:.4f}")
+                logger.debug(f"No voice detected, current value: {max_vad_threshold:.4f}")
                 with ASR_Audio_Buffer_Lock:   # 线程加锁
                     # 没人声时清除音频缓存队列
                     if len(ASR_Audio_Buffer) > 0:
@@ -58,7 +58,7 @@ def pyaudio_callback(in_data, frame_count, time_info, status):
                     return (None, pyaudio.paContinue)
 
         # step3 - 如果有人声, 则将数据放入队列中
-        logger.trace(f"Found voice detected, current value: {max_vad_threshold:.4f}")
+        logger.debug(f"Found voice detected, current value: {max_vad_threshold:.4f}")
         Audio_Queue.put(audio_data)
         return (None, pyaudio.paContinue)                 
 
@@ -67,7 +67,13 @@ def pyaudio_callback(in_data, frame_count, time_info, status):
         return (None, pyaudio.paAbort)
 
 
-cc = OpenCC('t2s')                                      # 维持翻译文本, 将繁体中文转换为简体中文
+# 维持翻译文本, 将繁体中文转换为简体中文
+cc = OpenCC('t2s')                                      
+# 特定黑名单, 如果 ASR 识别的内容在黑名单中, 则认为是异常识别
+black_list = [
+    "优优独播剧场——YoYo Television Series Exclusive",
+    "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+]
 
 def filter_asr_text(asr_text):
     """
@@ -75,10 +81,22 @@ def filter_asr_text(asr_text):
     """
     # 繁简转换, 解决异常中文问题
     asr_text = cc.convert(asr_text)
+
     # 检查是否有大量重复的输出, 例如 "你好你好你好你好你好你好你好你好" 这样的输出
     tokens_id = ASR_Tokenizer.encode(asr_text)
     set_id = set(copy.deepcopy(tokens_id))
     if len(tokens_id) > 8 and len(set_id) / len(tokens_id) < 0.5:   # 如果 token 长度大于 8 且重复率超过一半, 则认为是异常输出
+        logger.warning(f"Detected abnormal ASR Text, already ignored it.")
+        logger.trace(f"Abnormal ASR Text: {asr_text}")
+        return None
+    # 如果是英文, 并且全是大写 & 纯英文
+    elif asr_text.isupper() and any(c.isalpha() for c in asr_text):
+        asr_text = asr_text.lower().capitalize()  # 转小写 & 首字大写
+        logger.warning("Found all uppercase words, already corrected it.")
+        logger.trace(f"Change all uppercase words to: {asr_text}")
+        return asr_text
+    # 特定黑名单
+    elif asr_text in black_list:
         logger.warning(f"Detected abnormal ASR Text, already ignored it.")
         logger.trace(f"Abnormal ASR Text: {asr_text}")
         return None
@@ -181,12 +199,15 @@ def tran_asr_history():
 
 
 # 针对 audio_text_update 的变量
-asr_size = cfg.getint("ASR", "ASR_Frames_Buffer")   # 这里用于统计音频长度, 基于此计算是否无损 & 新句子
-new_time = None                                     # 新句子的开始时间
-best_baseline = None                                # 最准确的基本内容                                   
-candidate_list = deque(maxlen=asr_size)             # 候选列表, 用于判断最初的预测是否合理
-candidate_size = 0                                  # 候选列表长度计数
-log_level = cfg.get("General", "LogLevel")          # 日志等级
+asr_size = cfg.getint("ASR", "ASR_Frames_Buffer")       # 这里用于统计音频长度, 基于此计算是否无损 & 新句子
+new_time = None                                         # 新句子的开始时间
+best_baseline = None                                    # 最准确的基本内容    
+full_sentence = False                                   # 完整句子标识, 用于特殊情况断句使用                             
+candidate_list = deque(maxlen=asr_size)                 # 候选列表, 用于判断最初的预测是否合理
+candidate_size = 0                                      # 候选列表长度计数
+max_tokens_by_sentence = cfg.getint("General", "ASR_Max_tokens_by_Sentence")    # 单句最大长度, 超过会强制断句
+half_tokens_by_sentence = max_tokens_by_sentence // 2   # 单句最大长度的一半, 用来检测当前是否需要断句
+log_level = cfg.get("General", "LogLevel")              # 日志等级
 
 def audio_text_update():
     """
@@ -197,8 +218,10 @@ def audio_text_update():
     global ASR_Audio_Buffer
     global new_time
     global best_baseline
+    global full_sentence
     global candidate_list
     global candidate_size
+    global max_tokens_by_sentence
 
     # 没有数据 - 队列为空
     if ASR_Result_Queue.empty():
@@ -219,8 +242,10 @@ def audio_text_update():
     asr_src_result["text"] = asr_src_result.get("text").lstrip()
     ASR_Result_Queue.task_done()
     
-    # 情况1: 无损情况 - 只添加 candidate_list, 不做判断
-    if asr_src_result.get("size") < asr_size:
+    # 情况1: 无损情况 - 只添加 candidate_list, 不做判断 / 或者发现完整句子标记
+    # 1: asr_src_result.get("size") < asr_size 是无损情况, 队列被 vad 清空了
+    # 2：full_sentence is True 也是无损, 说明此时是一个长句子, 并且已经说完了, 此时队列已经被清空
+    if asr_src_result.get("size") < asr_size or full_sentence:
         # 计算当前候选列表的长度
         current_candidate_size = len(candidate_list)
         # 列出所有候选列表
@@ -229,12 +254,28 @@ def audio_text_update():
             for i in candidate_list:
                 logger.trace(f"Candidate list: {i}")
 
-        # 情况1-1: 新句子的开始; asr_size < 队列数量, 并且 len(candidate_list) = 0 时
-        # 由于此时时间是上一个时刻的, 因此也追加历史记录
-        if current_candidate_size == 0:
+        # 情况1-1: 发现完整句子标记, 说明这是一个长句子, 已经结束, 需要单独处理
+        if full_sentence:
             # 保留历史记录
             if ASR_Result != "":
                 logger.debug(f"Triggering case 1-1")
+                logger.trace(f"New History: {ASR_Result}")
+                ASR_Result_History.append({'asr_text': ASR_Result})
+                ASR_Result = ""
+                candidate_size = 0
+                candidate_list.clear()
+                full_sentence = False
+            # 记录新的时间
+            new_time = asr_src_result.get("time")
+            # 启动翻译任务
+            LLM_Executor.submit(tran_asr_history)
+
+        # 情况1-2: 新句子的开始; asr_size < 队列数量, 并且 len(candidate_list) = 0 时
+        # 由于此时时间是上一个时刻的, 因此也追加历史记录
+        elif current_candidate_size == 0:
+            # 保留历史记录
+            if ASR_Result != "":
+                logger.debug(f"Triggering case 1-2")
                 logger.trace(f"New History: {ASR_Result}")
                 ASR_Result_History.append({'asr_text': ASR_Result})
                 ASR_Result = ""
@@ -245,10 +286,10 @@ def audio_text_update():
             # 启动翻译任务
             LLM_Executor.submit(tran_asr_history)
 
-        # 情况1-2: 新句子的开始; 上一个句子不长, 只有 candidate_list 但没有选出 best_baseline
+        # 情况1-3: 新句子的开始; 上一个句子不长, 只有 candidate_list 但没有选出 best_baseline
         elif current_candidate_size < candidate_size and ASR_Result != "":
             # 保留历史记录
-            logger.debug(f"Triggering case 1-2")
+            logger.debug(f"Triggering case 1-3")
             logger.trace(f"New History: {ASR_Result}")
             ASR_Result_History.append({'asr_text': ASR_Result})
             candidate_size = 0
@@ -259,7 +300,7 @@ def audio_text_update():
             # 启动翻译任务
             LLM_Executor.submit(tran_asr_history)
         
-        # 情况1-3: 通过日志发现可能会存在 Candidate list 包含 2 段信息, 如果存在则直接去掉一段
+        # 情况1-4: 通过日志发现可能会存在 Candidate list 包含 2 段信息, 如果存在则直接去掉一段
         max_cand_size = 0
         split_idx = None
         candidate_list_copy = None
@@ -270,7 +311,7 @@ def audio_text_update():
             else:
                 ASR_History = f"{candidate_list[idx-1].get("time")} - {candidate_list[idx-1].get("text").lstrip()}"
                 ASR_Result_History.append({'asr_text': ASR_History})
-                logger.debug(f"Triggering case 1-3")
+                logger.debug(f"Triggering case 1-4")
                 logger.trace(f"New History: {ASR_History}")
                 # 启动翻译任务
                 LLM_Executor.submit(tran_asr_history)
@@ -335,8 +376,9 @@ def audio_text_update():
         # 抹除候选列表, 因为已经筛选出对应的 best_baseline
         candidate_list.clear()
     
-    # 情况3: best_baseline 不为 None, 则说明是一个长的历史语句, 则更新 best_baseline 到最新识别的内容
-    if best_baseline is not None:
+    # 情况3: best_baseline 不为 None, 并且 full_sentence 为 False
+    # 则说明是一个长的历史语句, 此时更新 best_baseline 到最新识别的内容
+    if best_baseline is not None and full_sentence is False:
         asr_now_result = asr_src_result.get("text")
         diff_result = difflib.SequenceMatcher(None, best_baseline, asr_now_result).get_matching_blocks()
         
@@ -347,7 +389,21 @@ def audio_text_update():
             new_content = asr_now_result[s+e:]          # 新识别的内容
             best_baseline = best_baseline + new_content # 完整的最新记录
             logger.trace(f"Best BaseLine update: {best_baseline}")
-        # 情况3-2: 没有相似的内容, 不动 best_baseline 的值
+            # 如果存在标点符号 & 当前语句 tokens 大于 half_tokens_by_sentence (max_tokens_by_sentence // 2)
+            if any(i in new_content for i in [".", "。"]) and len(ASR_Tokenizer.encode(best_baseline)) > half_tokens_by_sentence:
+                logger.debug("Triggering case 3-1, a complete sentence detected.")
+                logger.trace(f"New History: {best_baseline}")
+                full_sentence = True
+                with ASR_Audio_Buffer_Lock:
+                    ASR_Audio_Buffer.clear()
+            # 情况3-2: 语句长度过长, 触发强制断句
+            elif len(ASR_Tokenizer.encode(best_baseline)) > max_tokens_by_sentence:
+                logger.warning(f"Triggering case 3-2, The sentence is too long ({len(ASR_Tokenizer.encode(best_baseline))} >= {max_tokens_by_sentence}), force break it.")
+                logger.trace(f"New History: {best_baseline}")
+                full_sentence = True
+                with ASR_Audio_Buffer_Lock:
+                    ASR_Audio_Buffer.clear()
+        # 情况3-3: 没有相似的内容, 不动 best_baseline 的值
         else:
             logger.debug(f"ASR Restult will not update, Because no new content detected.")
 
