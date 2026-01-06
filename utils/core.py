@@ -73,6 +73,7 @@ cc = OpenCC('t2s')
 black_list = [
     "优优独播剧场——YoYo Television Series Exclusive",
     "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+    "Mm-hmm.",
 ]
 
 def filter_asr_text(asr_text):
