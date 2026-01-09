@@ -1,3 +1,4 @@
+import os
 import time
 import torch
 
@@ -11,10 +12,12 @@ from silero_vad import load_silero_vad
 from utils.log import logger
 from utils.cfg import cfg
 
-# 线程池里导包, 这里仅做记录
+# 仅作笔记记录, 这部分包已经按照不同情况在各自子线程里加载了
+# 需求是懒加载, 未来等 PEP 810 – Explicit lazy imports 实现后在调整
+# https://peps.python.org/pep-0810/
+# from optimum.intel import OVModelForSpeechSeq2Seq
 # from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
 # from transformers import pipeline
-# from langchain.chat_models import init_chat_model
 
 logger.info("Initialize other parameters...")
 #############################################
@@ -52,35 +55,62 @@ def init_ASR():
     初始化 ASR 的 tokenizer, model, pipeline
     """
     logger.info("Initializing ASR tokenizer, model and pipeline...")
-    # 导包也放进线程池里
-    from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
-    from transformers import pipeline
-    # ASR Tokenizer
-    ASR_Tokenizer = AutoTokenizer.from_pretrained(cfg.get("ASR", "ASR_Model"))
- 
-    # ASR Pipeline
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    ASR_Model = AutoModelForSpeechSeq2Seq.from_pretrained(
-        cfg.get("ASR", "ASR_Model"), 
-        dtype=torch_dtype, 
-        # low_cpu_mem_usage=True
-    )
-    ASR_Model.to(device)
 
-    Processor = AutoProcessor.from_pretrained(cfg.get("ASR", "ASR_Model"))
-    # 利用 ASR_Pipeline 来进行推理
-    # https://huggingface.co/docs/transformers/v5.0.0rc1/en/main_classes/pipelines#transformers.AutomaticSpeechRecognitionPipeline
-    ASR_Pipeline = pipeline(
-        "automatic-speech-recognition",
-        model=ASR_Model,
-        tokenizer=Processor.tokenizer,
-        feature_extractor=Processor.feature_extractor,
-        dtype=torch_dtype,
-        device=device,
-    )
-    logger.success("Finish initialized ASR tokenizer, model and pipeline.")
+    # 尝试以 OpenVINO 方式加载模型
+    if cfg.getboolean("INTEL", "OpenVINO_Enable"):
+        logger.info("OpenVINO is enable, Load the ASR model using Optimum Intel.")
+        # 加载特定包
+        from optimum.intel import OVModelForSpeechSeq2Seq
+        from transformers import AutoProcessor, AutoTokenizer
+        from transformers import pipeline
+        # ASR Tokenizer
+        ASR_Tokenizer = AutoTokenizer.from_pretrained(os.path.abspath(cfg.get("INTEL", "OpenVINO_ASR_Model")))
+        # Processor
+        Processor = AutoProcessor.from_pretrained(os.path.abspath(cfg.get("INTEL", "OpenVINO_ASR_Model")))
+        # ASR Model
+        ASR_Model = OVModelForSpeechSeq2Seq.from_pretrained(os.path.abspath(cfg.get("INTEL", "OpenVINO_ASR_Model")))
+        ASR_Model.to(cfg.get("INTEL", "OpenVINO_Device"))
+        # ASR_Pipeline
+        ASR_Pipeline = pipeline(
+            "automatic-speech-recognition",
+            model=ASR_Model,
+            tokenizer=Processor.tokenizer,
+            feature_extractor=Processor.feature_extractor,
+            device="cpu",   # pipeline 强制指定 cpu, 经测试这样 Intel 的 GPU 运行才正常
+        )
+        logger.success("Finish initialized ASR tokenizer, model and pipeline.")
+
+    # 正常方式加载模型
+    else:
+        logger.info("OpenVINO is disable, Load the ASR model using the normal method.")
+        # 加载特定包
+        from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer
+        from transformers import pipeline
+        # ASR Tokenizer
+        ASR_Tokenizer = AutoTokenizer.from_pretrained(cfg.get("ASR", "ASR_Model"))
+        # Processor
+        Processor = AutoProcessor.from_pretrained(cfg.get("ASR", "ASR_Model"))
+        # ASR Model
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+        ASR_Model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            cfg.get("ASR", "ASR_Model"), 
+            dtype=torch_dtype, 
+        )
+        ASR_Model.to(device)
+        # ASR_Pipeline
+        ASR_Pipeline = pipeline(
+            "automatic-speech-recognition",
+            model=ASR_Model,
+            tokenizer=Processor.tokenizer,
+            feature_extractor=Processor.feature_extractor,
+            dtype=torch_dtype,
+            device=device,
+        )
+        logger.success("Finish initialized ASR tokenizer, model and pipeline.")
+
     return ASR_Tokenizer, ASR_Model, ASR_Pipeline
+    
 
 # ASR_Tokenizer, ASR_Model, ASR_Pipeline = ASR_Executor.submit(init_ASR).result()
 ASR_Init = ASR_Executor.submit(init_ASR)

@@ -1,12 +1,22 @@
 # Overview
-App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Gradio](https://www.gradio.app/) 应用, 可以全程保持在本地运行, 不需要连接互联网
-
+App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Gradio](https://www.gradio.app/) 应用
+- 可以全程保持在本地运行, 不需要连接互联网
+- 支持 Intel GPU, 可以将 OpenAI Whisper 系列模型转换成 OpenVINO 支持的格式
+  - 如果是 Intel 核显, 建议选择 `whisper-tiny` 和 `whisper-base` 来进行转换
+  - 使用前需要手动转换模型, 命令如下:
+    ```CMD
+    # 激活虚拟环境
+    cd .\.venv\Scripts && activate.bat
+    # 转换模型
+    python scripts\convert_model.py --src <model_path> [--dst <convert_model>]
+    ```
 
 # Quickstart
 - 前置准备
   - 编辑配置文件 `config.cfg`, 需要指定 `FFmpeg_Path` 对应的路径 (需要 Full-Shared 版本)
   - 编辑配置文件 `config.cfg`, 需要指定 `ASR_Model` 模型对应的路径
   - 编辑配置文件 `config.cfg`, 需要指定 `LLM` 部分对应的参数
+  - 如果想使用 Intel 显卡来进行 ASR, 可以在 `config.cfg` 中设置 `OpenVINO_Enable=True`, 并指定 `OpenVINO_ASR_Model` 为转换后的模型路径
 - 打开方法
   - 执行 `Real-time ASR.bat`        (请参考 Installation 来配置环境)
   - 执行 `python Real-time ASR.py`  (请参考 Installation 来配置环境)
@@ -76,9 +86,9 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
     - 手动安装
         ```CMD
         # 安装 PyTorch - 如果有支持 CUDA 的 GPU, 推荐选这个
-        pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+        pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
         # 安装 PyTorch - CPU 版本
-        pip3 install torch torchvision
+        pip install torch torchvision
 
         # 其余依赖库
         # 如果安装缓慢, 可以指定镜像站: -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -93,6 +103,7 @@ App-for-ASR 是一个基于 Python 的 **实时语音识别** & **翻译** [Grad
         pip install -U langchain-openai
         pip install -U pywebview
         pip install -U pyinstaller
+        pip install -U --upgrade-strategy eager optimum[openvino]
         ```
 
 

@@ -15,7 +15,7 @@ window = webview.create_window(
     title="Real-time ASR", 
     url=gradio_app.local_url,
     width=1300,
-    height=450,
+    height=550,
     # 可调整大小
     resizable=True,
     # 始终位于其它窗口之上

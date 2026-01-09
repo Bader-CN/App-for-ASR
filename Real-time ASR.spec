@@ -7,26 +7,30 @@ from PyInstaller.utils.hooks import collect_data_files, collect_all
 ffmpeg_path = r".\ffmpeg\bin"
 os.environ["Path"] = os.path.abspath(ffmpeg_path) + os.pathsep + os.environ["Path"]
 
+collect_all_list = [
+    "torchcodec",
+    "silero_vad",
+    "langchain_ollama",
+    "langchain_openai",
+    # "transformers",
+    # "optimum.intel",
+    "openvino",
+]
+
 datas = []
 binaries = []
 hiddenimports = []
+
+for packet in collect_all_list:
+    packet_datas, packet_binaries, packet_hiddenimports = collect_all(packet)
+    datas.extend(packet_datas)
+    binaries.extend(packet_binaries)
+    hiddenimports.extend(packet_hiddenimports)
 
 datas += collect_data_files('gradio')
 datas += collect_data_files('gradio_client')
 datas += collect_data_files('groovy')
 datas += collect_data_files('safehttpx')
-
-# 修复 torchcodec 依赖问题
-torch_datas, torch_binaries, torch_hiddenimports = collect_all('torchcodec')
-datas.extend(torch_datas)
-binaries.extend(torch_binaries)
-hiddenimports.extend(torch_hiddenimports)
-
-# 修复 silero_vad 依赖问题
-silero_datas, silero_binaries, silero_hiddenimports = collect_all('silero_vad')
-datas.extend(silero_datas)
-binaries.extend(silero_binaries)
-hiddenimports.extend(silero_hiddenimports)
 
 a = Analysis(
     ['Real-time ASR.py'],
@@ -41,6 +45,8 @@ a = Analysis(
     # gradio 依赖问题, 不能搜集 pyc 文件, 只能收集 py 文件
     module_collection_mode={
         'gradio': 'py',  # Collect gradio package as source .py files
+        'transformers': 'py',
+        'optimum.intel': 'py',
     },
 )
 pyz = PYZ(a.pure)
